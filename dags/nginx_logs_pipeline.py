@@ -109,8 +109,9 @@ def nginx_logs_pipeline():
             cmd = ["powershell", "-File", str(script), "-LocalDir", parse_result["out_dir"],
                    "-LogDate", parse_result["log_date"]]
         else:
-            cmd = ["gcloud", "storage", "rsync", parse_result["out_dir"], gcs_path, "--recursive"]
-        subprocess.run(cmd, check=True)
+            cmd = ["bash", str(script), "--local-dir", parse_result["out_dir"],
+                   "--log-date", parse_result["log_date"]]
+        _run(cmd)
         _record_step(parse_result["log_date"], parse_result["filename"], "gcs", "success", gcs_path=gcs_path)
         return parse_result
 
