@@ -186,6 +186,49 @@ DBT_SELECT=tag:nginx_logs
 ```
 Notes: keep the profile's schema = the same MySQL database that holds `stg_access_log`; check for model name collisions (`stg_nginx_logs`, `fct_requests_hourly`, `fct_errors_daily`); `fct_*` marts are full-refresh tables, rebuilt daily — fine at this size, but exclude them from any global `dbt build` if you don't want them refreshed by other DAGs (or select them by tag only here).
 
+## Airflow CLI cheatsheet (daily ops)
+
+Run inside the Airflow container: `astro dev bash` (Astronomer) or `docker compose exec airflow bash`.
+
+```bash
+# -- monitoring
+airflow dags list-runs -d nginx_logs_pipeline                # recent runs + states
+airflow dags list-runs -d nginx_logs_pipeline --state failed # failed runs only
+airflow tasks states-for-dag-run nginx_logs_pipeline 2026-07-22T00:00:00+00:00
+airflow dags show nginx_logs_pipeline                        # rendered DAG graph (text)
+
+# -- manual runs
+airflow dags trigger nginx_logs_pipeline --logical-date 2026-07-22   # backfill single day
+airflow dags backfill -d nginx_logs_pipeline -s 2026-07-20 -e 2026-07-22  # range reprocess
+airflow dags test nginx_logs_pipeline 2026-07-22             # one-off local run (no scheduler)
+
+# -- retry / clear (idempotent tasks make this safe)
+airflow tasks clear nginx_logs_pipeline -s 2026-07-22 -e 2026-07-22            # re-run whole day
+airflow tasks clear nginx_logs_pipeline -t load_to_mysql -s 2026-07-22 -e 2026-07-22  # single task
+airflow tasks test nginx_logs_pipeline parse_to_parquet 2026-07-22             # debug one task locally
+
+# -- pause / resume
+airflow dags pause nginx_logs_pipeline
+airflow dags unpause nginx_logs_pipeline
+
+# -- config & connections
+airflow connections get fs_default
+airflow connections add fs_default --conn-type fs --conn-extra '{"path":"/"}'
+airflow variables list
+airflow config get-value core dags_folder
+
+# -- health / maintenance
+airflow db check
+airflow db migrate
+airflow dags reserialize          # force re-parse after DAG code change without scheduler restart
+airflow dags list-import-errors   # broken DAGs
+airflow jobs check --job-type SchedulerJob
+```
+
+Pipeline-specific notes:
+- Re-running a day is safe at every step: parse overwrites parquet, MySQL load deletes-then-inserts the day, dbt marts are full-refresh.
+- Audit trail: `SELECT * FROM pipeline_runs WHERE log_date = '2026-07-22' ORDER BY id;` in MySQL.
+
 ## Known limitations
 - **DuckDB `mysql` extension pushdown bug**: DELETE/SELECT with temporal filters generates `'literal'::TIMESTAMP` casts that MySQL rejects. Workaround in place: all temporal DELETEs go through the native MySQL client; DuckDB is used only for INSERT (which translates correctly).
 - DuckDB mysql extension has no `INSERT IGNORE` support — hence delete-then-insert idempotency.
