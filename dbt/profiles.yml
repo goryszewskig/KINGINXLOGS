@@ -1,0 +1,11 @@
+nginx_logs:
+  target: dev
+  outputs:
+    dev:
+      type: mysql
+      host: "{{ env_var('MYSQL_HOST', 'localhost') }}"
+      port: "{{ env_var('MYSQL_PORT', '3306') | int }}"
+      username: "{{ env_var('MYSQL_USER') }}"
+      password: "{{ env_var('MYSQL_PASSWORD') }}"
+      database: "{{ env_var('MYSQL_DATABASE') }}"
+      schema: "{{ env_var('MYSQL_DATABASE') }}"

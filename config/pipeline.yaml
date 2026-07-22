@@ -1,0 +1,14 @@
+pipeline:
+  log_file_pattern: "access.log-{date:%Y%m%d}"   # rotated file, no extension if not gzipped
+  gzip: false                                     # set true if logrotate compresses
+  staging_subdir: "date={date:%Y-%m-%d}"
+  parquet:
+    compression: ZSTD
+    row_group_size: 100000
+  mysql:
+    staging_table: stg_access_log
+    chunk_rows: 200000
+  dq:
+    max_loss_pct: 0.1    # fail if parsed/raw lines differ by more than this %
+  retention:
+    keep_staging_files: false

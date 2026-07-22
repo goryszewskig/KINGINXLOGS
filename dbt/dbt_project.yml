@@ -1,0 +1,11 @@
+name: nginx_logs
+version: "1.0.0"
+profile: nginx_logs
+model-paths: ["models"]
+
+models:
+  nginx_logs:
+    staging:
+      +materialized: view
+    marts:
+      +materialized: table

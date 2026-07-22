@@ -1,0 +1,7 @@
+duckdb>=1.1.0
+mysql-connector-python>=8.0
+# apache-airflow>=3.0.0   # install on Linux/WSL/Docker only - no native Windows support
+dbt-core<1.8              # dbt-mysql adapter currently pins dbt-core 1.7.x
+dbt-mysql
+PyYAML>=6.0
+python-dotenv>=1.0

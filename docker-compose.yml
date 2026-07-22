@@ -1,0 +1,45 @@
+services:
+  mysql:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: logs
+      MYSQL_USER: etl
+      MYSQL_PASSWORD: etl
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-proot"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+    ports:
+      - "3307:3306"
+    volumes:
+      - .\sql\init_schema.sql:/docker-entrypoint-initdb.d/00_init.sql:ro
+
+  airflow:
+    image: apache/airflow:3.0.0
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      AIRFLOW__CORE__EXECUTOR: SequentialExecutor
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      AIRFLOW__CORE__DAGS_FOLDER: /opt/pipeline/dags
+      AIRFLOW_CONN_FS_DEFAULT: '{"conn_type": "fs", "extra": {"path": "/"}}'
+      _PIP_ADDITIONAL_REQUIREMENTS: duckdb PyYAML python-dotenv dbt-mysql mysql-connector-python
+      PIPELINE_ROOT: /opt/pipeline
+      LOG_DIR: /opt/pipeline/testdata/logs
+      STAGING_DIR: /opt/pipeline/staging
+      MYSQL_HOST: mysql
+      MYSQL_PORT: "3306"
+      MYSQL_USER: etl
+      MYSQL_PASSWORD: etl
+      MYSQL_DATABASE: logs
+      GCS_BUCKET: test-bucket
+      SKIP_GCS: "1"
+    volumes:
+      - M:\KINGINXLOGS:/opt/pipeline
+    command: >
+      bash -c "airflow db migrate &&
+               airflow dags reserialize &&
+               airflow dags test nginx_logs_pipeline 2026-07-22"
