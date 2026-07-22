@@ -5,6 +5,7 @@ model-paths: ["models"]
 
 models:
   nginx_logs:
+    +tags: ["nginx_logs"]
     staging:
       +materialized: view
     marts:

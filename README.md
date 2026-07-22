@@ -173,6 +173,19 @@ The DAG's `dbt_run` task uses `DBT_BINARY` (defaults to global `dbt`), so your d
 - DuckDB downloads its `mysql` extension from the internet on first `INSTALL mysql` — needs outbound network from the container.
 - Copy this repo into your astro project (e.g. under `dags/KINGINXLOGS/`) and point `PIPELINE_ROOT` there.
 
+### Option A: standalone dbt project (this repo's `dbt/`)
+Set `DBT_BINARY` to a venv with `dbt-mysql` (dbt-core 1.7.x). The DAG runs `dbt run --project-dir <this repo>/dbt --profiles-dir <this repo>/dbt`.
+
+### Option B: models inside your existing dbt project
+Copy `dbt/models/staging/stg_nginx_logs.sql` + `dbt/models/marts/*.sql` into your project, and merge the `stg_access_log` table into your existing `sources.yml` (adjust the source name and the `{{ source('raw', 'stg_access_log') }}` reference in the staging model). Models are tagged `nginx_logs`, so the DAG can build just them:
+```
+DBT_BINARY=/path/to/your/dbt_venv/bin/dbt
+DBT_PROJECT_DIR=/usr/local/airflow/dags/your_dbt_project
+DBT_SELECT=tag:nginx_logs
+# DBT_PROFILES_DIR unset -> uses your default ~/.dbt/profiles.yml
+```
+Notes: keep the profile's schema = the same MySQL database that holds `stg_access_log`; check for model name collisions (`stg_nginx_logs`, `fct_requests_hourly`, `fct_errors_daily`); `fct_*` marts are full-refresh tables, rebuilt daily — fine at this size, but exclude them from any global `dbt build` if you don't want them refreshed by other DAGs (or select them by tag only here).
+
 ## Known limitations
 - **DuckDB `mysql` extension pushdown bug**: DELETE/SELECT with temporal filters generates `'literal'::TIMESTAMP` casts that MySQL rejects. Workaround in place: all temporal DELETEs go through the native MySQL client; DuckDB is used only for INSERT (which translates correctly).
 - DuckDB mysql extension has no `INSERT IGNORE` support — hence delete-then-insert idempotency.
