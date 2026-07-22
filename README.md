@@ -138,6 +138,41 @@ MySQL is exposed on `localhost:3307` (etl/etl, db `logs`). The compose command r
 - Dedup safety net: `line_hash` (md5 of the raw line) is part of the PK.
 - dbt models are full-refresh tables — safe to re-run.
 
+## Astronomer (astro dev) deployment
+
+The DAG runs on Astronomer Runtime 3.x (Airflow 3.0). To avoid breaking existing DAGs (e.g. `DbtDag`/cosmos with their own dbt-core):
+
+### requirements.txt in your astro project — add ONLY these
+```
+duckdb>=1.1.0
+mysql-connector-python>=8.0
+PyYAML>=6.0
+python-dotenv>=1.0
+```
+**Do NOT add `dbt-core`/`dbt-mysql` here.** `dbt-mysql` pins `dbt-core~=1.7.0` and would downgrade the global dbt-core your existing cosmos DAGs depend on.
+
+### Isolated dbt venv — add to your astro Dockerfile
+```dockerfile
+RUN python -m venv /usr/local/airflow/dbt_nginx_venv && \
+    /usr/local/airflow/dbt_nginx_venv/bin/pip install --no-cache-dir dbt-mysql
+```
+Then set in astro `.env`:
+```
+DBT_BINARY=/usr/local/airflow/dbt_nginx_venv/bin/dbt
+AIRFLOW_CONN_FS_DEFAULT={"conn_type":"fs","extra":{"path":"/"}}
+LOG_DIR=/usr/local/airflow/logs/nginx
+STAGING_DIR=/usr/local/airflow/staging
+PIPELINE_ROOT=/usr/local/airflow/dags/KINGINXLOGS
+MYSQL_HOST=... (etc.)
+```
+The DAG's `dbt_run` task uses `DBT_BINARY` (defaults to global `dbt`), so your dbt-mysql runs fully isolated — zero impact on `DbtDag` DAGs and their dbt version.
+
+### Other astro notes
+- No need for `airflow dags reserialize` — astro's dag processor handles serialization (that step was only for the bare-container CLI test).
+- `SKIP_GCS` unset → real GCS upload; astro dev container needs `gcloud` + creds (custom Dockerfile or switch the upload task to `google-cloud-storage` Python client).
+- DuckDB downloads its `mysql` extension from the internet on first `INSTALL mysql` — needs outbound network from the container.
+- Copy this repo into your astro project (e.g. under `dags/KINGINXLOGS/`) and point `PIPELINE_ROOT` there.
+
 ## Known limitations
 - **DuckDB `mysql` extension pushdown bug**: DELETE/SELECT with temporal filters generates `'literal'::TIMESTAMP` casts that MySQL rejects. Workaround in place: all temporal DELETEs go through the native MySQL client; DuckDB is used only for INSERT (which translates correctly).
 - DuckDB mysql extension has no `INSERT IGNORE` support — hence delete-then-insert idempotency.

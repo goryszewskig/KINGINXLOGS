@@ -147,8 +147,9 @@ def nginx_logs_pipeline():
 
     @task()
     def dbt_run(parse_result: dict) -> dict:
-        subprocess.run(["dbt", "run", "--project-dir", str(ROOT / "dbt"),
-                        "--profiles-dir", str(ROOT / "dbt")], check=True)
+        dbt_bin = os.environ.get("DBT_BINARY", "dbt")
+        _run([dbt_bin, "run", "--project-dir", str(ROOT / "dbt"),
+              "--profiles-dir", str(ROOT / "dbt")])
         _record_step(parse_result["log_date"], parse_result["filename"], "dbt", "success")
         return parse_result
 
